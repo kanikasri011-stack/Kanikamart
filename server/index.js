@@ -1,1 +1,38 @@
-const express = require("express");`nconst mysql = require("mysql2");`nconst cors = require("cors");`n`nconst app = express();`napp.use(cors());`napp.use(express.json());`n`nconst db = mysql.createConnection({`n    host: "localhost",`n    user: "root",`n    password: "",`n    database: "kanimart_db"`n});`n`ndb.connect(err => {`n    if (err) {`n        console.log("Database Connection Failed! ?", err);`n    } else {`n        console.log("MySQL Database Connected Successfully! ??");`n    }`n});`n`napp.post("/api/orders", (req, res) => {`n    const { name, phone, address, payment, total } = req.body;`n    const query = "INSERT INTO orders (customer_name, phone, address, payment_method, total_amount) VALUES (?, ?, ?, ?, ?)";`n    `n    db.query(query, [name, phone, address, payment, total], (err, result) => {`n        if (err) {`n            console.error("Insert Error:", err);`n            return res.status(500).json({ error: "Failed to store order" });`n        }`n        res.json({ message: "Order saved in Database successfully!", orderId: result.insertId });`n    });`n});`n`napp.listen(5000, () => console.log("Server running on http://localhost:5000 ??"));
+const express = require("express");
+const { Pool } = require("pg");
+const cors = require("cors");
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Render Database Connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+});
+
+pool.connect((err, client, release) => {
+  if (err) {
+    console.error("Database Connection Failed!", err.stack);
+  } else {
+    console.log("PostgreSQL Database Connected Successfully!");
+    release();
+  }
+});
+
+app.post("/api/orders", async (req, res) => {
+  const { name, phone, address, payment, total } = req.body;
+  const query = "INSERT INTO orders (customer_name, phone, address, payment_method, total_amount) VALUES (\$1, \$2, \$3, \$4, \$5) RETURNING id";
+  
+  try {
+    const result = await pool.query(query, [name, phone, address, payment, total]);
+    res.json({ message: "Order saved in Database successfully!", orderId: result.rows[0].id });
+  } catch (err) {
+    console.error("Insert Error:", err);
+    res.status(500).json({ error: "Failed to store order" });
+  }
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
